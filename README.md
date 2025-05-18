@@ -3,6 +3,11 @@
 
 ## Getting started
 
+docker run -p 8000:8000 --name pedigree elicitsoftware/pedigree:1.0.0-alpha.1
+
+curl -X POST -F "ped=@/Users/matthew/Dev/Elicit/Pedigree/ped1.txt" http://localhost:8000/svg
+
+
 To make it easy for you to get started with GitLab, here's a list of recommended next steps.
 
 Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
