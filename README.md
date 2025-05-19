@@ -42,20 +42,16 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
   <p align="left">
-    <a href="https://github.com/elicitsoftware/elicit">Elicit Software</a> was designed and developed by <a href="https://www.michiganmedicine.org/">Michigan Medicine</a>. Pedigree is one module build to display family pedigree svg images for the <a href="https://github.com/elicitsoftware/FHHS">Family Health History Survey</a> project.
+    <a href="https://github.com/elicitsoftware/elicit">Elicit Software</a> was designed and developed by <a href="https://www.michiganmedicine.org/">Michigan Medicine</a>. Pedigree is one module build to display family pedigree images for the <a href="https://github.com/elicitsoftware/FHHS">Family Health History Survey</a> project. It is a simple wrapper using Plumber and Docker to convienently package the Kinship2 package.
   </p>
 
-<!-- [![Product Name Screen Shot][product-screenshot]](https://example.com)
-
-Here's a blank template to get started. To avoid retyping too much info, do a search and replace with your text editor for the following: `github_username`, `repo_name`, `twitter_handle`, `linkedin_username`, `email_client`, `email`, `project_title`, `project_description`, `project_license`
- -->
+<div align="center"><image src="images/sample_pedigree.svg" height=600></div>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Built With
 [![Rplumber][Rplumber.io]][Rplumber-url]
 [![R][R.org]][R-url]
-[![Maven][Maven.org]][Maven-url]
 [![Docker][Docker.com]][Docker-url]
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -94,7 +90,7 @@ See the [open issues](https://github.com/ElicitSoftware/Elicit/issues) for a ful
 
 <!-- LICENSE -->
 ## License
-This project only contains a plumber file, a docker file, maven script, and a test file. Because of the low effort it is being released under the MIT License with hopes it will be usefull to others.
+Released under the MIT License with in the hope it will be usefull to others.
 
 See `LICENSE.md` for more information.
 
