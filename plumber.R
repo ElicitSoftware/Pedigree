@@ -45,3 +45,9 @@ function(ped) {
     mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 4, cex = 0.8, col = "black")
   }
 }
+
+#* Health check endpoint
+#* @get /healthz
+function() {
+  list(status = "ok")
+}
