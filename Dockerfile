@@ -14,8 +14,8 @@ FROM rstudio/plumber:latest
     # Set working directory
     WORKDIR /app
 
-    # Expose port 8000
-    EXPOSE 8000
+    # Expose port 8080
+    EXPOSE 8080
 
     # Run plumber API
     CMD ["/app/plumber.R"]
