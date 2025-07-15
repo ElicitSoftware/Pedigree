@@ -7,7 +7,6 @@ library(plumber)
 library(Matrix)
 library(quadprog)
 library(kinship2)
-options("plumber.port" = 8080)
 #* @apiTitle Elicit FHHS Kinship API
 #* @apiDescription Elicit FHHS Kinship Example
 
