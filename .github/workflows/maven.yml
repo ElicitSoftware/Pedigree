@@ -11,7 +11,8 @@ name: Build and Push Multi-Arch Docker Image
 on:
   workflow_dispatch:
   push:
-    branches: [ 'main' ]
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -44,10 +45,10 @@ jobs:
         with:
           images: elicitsoftware/pedigree
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix={{branch}}-
+            type=ref,event=tag
+            type=raw,value=latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build and Push Multi-Platform Image
         uses: docker/build-push-action@v5
