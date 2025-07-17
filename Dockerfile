@@ -1,6 +1,6 @@
 FROM rstudio/plumber:latest
 
-    RUN apt update && apt-get full-upgrade -y
+    RUN apt-get update && apt-get full-upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
     RUN R -e "install.packages('kinship2', dependencies=TRUE, repos='http://cran.us.r-project.org')"
 
