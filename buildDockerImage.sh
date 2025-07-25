@@ -1,2 +1,2 @@
 # Build the multi-arch image
-docker buildx build --platform linux/amd64,linux/arm64 --no-cache -t elicitsoftware/pedigree:latest --load .
+docker buildx build --no-cache -t elicitsoftware/pedigree:latest --load .
