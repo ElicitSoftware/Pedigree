@@ -59,7 +59,8 @@ function(ped) {
   cols <- c(ifelse(data_df$ID == 7, 3,ifelse(data_df$ul + data_df$ur + data_df$ll + data_df$lr > 0  ,2 ,1)))
   
   # Create the pedigree object with all family relationship and status data
-  myped <- pedigree(id=data_df$ID, dadid=data_df$Dadid, momid=data_df$Momid, sex=data_df$Sex, status=data_df$Status, affected=as.matrix(aff), famid=data_df$Ped)
+  # Wrap in suppressWarnings to prevent deprecation warnings from corrupting SVG output
+  myped <- suppressWarnings(pedigree(id=data_df$ID, dadid=data_df$Dadid, momid=data_df$Momid, sex=data_df$Sex, status=data_df$Status, affected=as.matrix(aff), famid=data_df$Ped))
 
   # Configure plot margins to accommodate legend text at bottom
   # Format: c(bottom, left, top, right) - extra space at bottom for 3-4 legend lines
@@ -69,7 +70,8 @@ function(ped) {
   # symbolsize: controls the size of pedigree symbols
   # col: vector of colors (green for respondent, red for affected, black for unaffected)
   # cex: character expansion factor for text size
-  plot(myped['1'], ids, symbolsize = 1.2, col=cols, cex=.7)
+  # Wrap in suppressWarnings to prevent deprecation warnings from corrupting SVG output
+  suppressWarnings(plot(myped['1'], ids, symbolsize = 1.2, col=cols, cex=.7))
 
   # Add legend lines at the bottom of the plot
   # side 1 = bottom, line = distance from plot area, cex = text size
