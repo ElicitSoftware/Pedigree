@@ -143,6 +143,7 @@ function(ped) {
   suppressWarnings(
     plot(
       pedigree_obj,
+      aff_mark = FALSE,
       id_lab = "display_id",
       label = "cancer_label",
       symbolsize = 1.2,
