@@ -31,6 +31,60 @@ normalize_flag <- function(value, default = FALSE) {
   result
 }
 
+add_proband_halo <- function(plot_data, pedigree_df) {
+  proband_rows <- pedigree_df[pedigree_df$proband, , drop = FALSE]
+
+  if (nrow(proband_rows) == 0) {
+    return(plot_data)
+  }
+
+  proband_row <- proband_rows[1, , drop = FALSE]
+  halo_color <- "#1B5E20"
+  boxh <- plot_data$par_usr$boxh
+
+  node_rows <- plot_data$df[
+    plot_data$df$id == "polygon" & grepl(proband_row$display_id, plot_data$df$tips, fixed = TRUE),
+    ,
+    drop = FALSE
+  ]
+
+  if (nrow(node_rows) == 0) {
+    return(plot_data)
+  }
+
+  proband_shape <- if (proband_row$sex == 1L) 0 else if (proband_row$sex == 2L) 1 else 5
+  halo_cex <- if (proband_row$sex == 2L) 3.8 else 4.1
+
+  if (!"pch" %in% names(plot_data$df)) {
+    plot_data$df$pch <- NA_real_
+  }
+
+  halo_row <- data.frame(
+    id = "proband_halo",
+    x0 = node_rows$x0[1],
+    y0 = node_rows$y0[1] + (boxh / 2),
+    x1 = NA_real_,
+    y1 = NA_real_,
+    type = "points",
+    fill = halo_color,
+    border = NA_character_,
+    angle = NA_real_,
+    density = NA_real_,
+    cex = halo_cex,
+    label = NA_character_,
+    tips = "",
+    lwd = NA_real_,
+    adjx = NA_real_,
+    adjy = NA_real_,
+    lty = NA_real_,
+    pch = proband_shape,
+    stringsAsFactors = FALSE
+  )
+
+  plot_data$df <- rbind(halo_row, plot_data$df)
+  plot_data
+}
+
 build_pedixplorer_df <- function(data_df) {
   names(data_df) <- tolower(names(data_df))
 
@@ -140,24 +194,34 @@ function(ped) {
 
   par(mar = c(5, 2, 1, 2))
 
-  suppressWarnings(
-    plot(
+  plot_data <- suppressWarnings(
+    ped_to_plotdf(
       pedigree_obj,
       aff_mark = FALSE,
       id_lab = "display_id",
       label = "cancer_label",
       label_dist = c(1, 1.5, 2.1),
       symbolsize = 1.2,
-      cex = 0.7,
-      legend = FALSE
+      cex = 0.7
     )
   )
 
-  mtext("P with arrow = Respondent", side = 1, line = 2, cex = 0.8, col = "black")
-  mtext("Red fill = Family member with cancer", side = 1, line = 3, cex = 0.8, col = "red")
+  plot_data$df <- subset(plot_data$df, !(id %in% c("consultand-proband", "proband")))
+  plot_data <- add_proband_halo(plot_data, pedigree_df)
+
+  suppressWarnings(
+    plot_fromdf(
+      plot_data$df,
+      usr = plot_data$par_usr$usr,
+      boxw = plot_data$par_usr$boxw,
+      boxh = plot_data$par_usr$boxh
+    )
+  )
+
+  mtext("Red fill = Family member with cancer", side = 1, line = 2, cex = 0.8, col = "red")
 
   if (grepl("*", file_content, fixed = TRUE)) {
-    mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 4, cex = 0.8, col = "black")
+    mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 3, cex = 0.8, col = "black")
   }
 }
 
