@@ -146,6 +146,7 @@ function(ped) {
       aff_mark = FALSE,
       id_lab = "display_id",
       label = "cancer_label",
+      label_dist = c(1, 1.5, 2.1),
       symbolsize = 1.2,
       cex = 0.7,
       legend = FALSE
