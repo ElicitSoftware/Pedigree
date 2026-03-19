@@ -39,7 +39,7 @@ add_proband_halo <- function(plot_data, pedigree_df) {
   }
 
   proband_row <- proband_rows[1, , drop = FALSE]
-  halo_color <- "#1B5E20"
+  halo_color <- "#33a33b"
   boxh <- plot_data$par_usr$boxh
 
   node_rows <- plot_data$df[
@@ -53,7 +53,7 @@ add_proband_halo <- function(plot_data, pedigree_df) {
   }
 
   proband_shape <- if (proband_row$sex == 1L) 0 else if (proband_row$sex == 2L) 1 else 5
-  halo_cex <- if (proband_row$sex == 2L) 3.8 else 4.1
+    halo_cex <- if (proband_row$sex == 2L) 5 else 6
 
   if (!"pch" %in% names(plot_data$df)) {
     plot_data$df$pch <- NA_real_
@@ -73,7 +73,7 @@ add_proband_halo <- function(plot_data, pedigree_df) {
     cex = halo_cex,
     label = NA_character_,
     tips = "",
-    lwd = NA_real_,
+      lwd = 5,
     adjx = NA_real_,
     adjy = NA_real_,
     lty = NA_real_,
