@@ -1,3 +1,82 @@
+#* Generates a landscape SVG image from a pedigree data frame
+#*
+#* This endpoint accepts a tab-delimited file containing pedigree data and
+#* generates an SVG visualization of the family tree in landscape orientation (11x8.5 inches).
+#* The SVG is returned as a character string.
+#*
+#* @post /svg
+#* @param ped:file A tab-delimited file containing pedigree data
+#* @serializer contentType list(type="image/svg+xml")
+function(ped) {
+  file_content <- ped[[1]]
+
+  data_df <- read.table(
+    text = file_content,
+    header = TRUE,
+    sep = "\t",
+    na.strings = "NA",
+    stringsAsFactors = FALSE,
+    quote = "",
+    comment.char = ""
+  )
+
+  pedigree_df <- build_pedixplorer_df(data_df)
+
+  pedigree_obj <- suppressWarnings(
+    Pedigree(
+      pedigree_df,
+      col_aff = "affection",
+      col_avail = "avail",
+      colors_aff = c("white", "red"),
+      colors_unaff = c("white", "white"),
+      colors_avail = c("black", "black")
+    )
+  )
+
+  # Create a temporary file for the SVG
+  svg_file <- tempfile(fileext = ".svg")
+  svg(filename = svg_file, width = 11, height = 8.5)
+  # Increase left and right margins to prevent text cutoff
+  # Further increase left margin to prevent text cutoff
+  par(mar = c(5, 4, 1, 4))
+
+  plot_data <- suppressWarnings(
+    ped_to_plotdf(
+      pedigree_obj,
+      aff_mark = FALSE,
+      id_lab = "display_id",
+      label = "cancer_label",
+      label_dist = c(1, 1.5, 2.1),
+      symbolsize = 1.2,
+      cex = 0.7
+    )
+  )
+
+  plot_data$df <- subset(plot_data$df, !(id %in% c("consultand-proband", "proband")))
+  plot_data <- add_proband_halo(plot_data, pedigree_df)
+
+  suppressWarnings(
+    plot_fromdf(
+      plot_data$df,
+      usr = plot_data$par_usr$usr,
+      boxw = plot_data$par_usr$boxw,
+      boxh = plot_data$par_usr$boxh
+    )
+  )
+
+  mtext("Red fill = Family member with cancer", side = 1, line = 2, cex = 0.8, col = "red")
+
+  if (grepl("*", file_content, fixed = TRUE)) {
+    mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 3, cex = 0.8, col = "black")
+  }
+
+  dev.off()
+
+  # Read SVG content and return
+  svg_content <- paste(readLines(svg_file, warn = FALSE), collapse = "\n")
+  unlink(svg_file)
+  return(svg_content)
+}
 # Elicit FHHS Pedigree API
 #
 # This Plumber API provides endpoints for generating family pedigree diagrams
@@ -154,75 +233,6 @@ build_pedixplorer_df <- function(data_df) {
     cancer_label = cancer_label,
     stringsAsFactors = FALSE
   )
-}
-
-#* Generates a pedigree SVG image from a pedigree data frame
-#*
-#* This endpoint accepts a tab-delimited file containing pedigree data and
-#* generates an SVG visualization of the family tree. The expected input is a
-#* simplified pedigree table with one affected flag, one proband flag, a display
-#* label, and a cancer label for each individual.
-#*
-#* @post /svg
-#* @param ped:file A tab-delimited file containing pedigree data
-#* @serializer svg
-function(ped) {
-  file_content <- ped[[1]]
-
-  data_df <- read.table(
-    text = file_content,
-    header = TRUE,
-    sep = "\t",
-    na.strings = "NA",
-    stringsAsFactors = FALSE,
-    quote = "",
-    comment.char = ""
-  )
-
-  pedigree_df <- build_pedixplorer_df(data_df)
-
-  pedigree_obj <- suppressWarnings(
-    Pedigree(
-      pedigree_df,
-      col_aff = "affection",
-      col_avail = "avail",
-      colors_aff = c("white", "red"),
-      colors_unaff = c("white", "white"),
-      colors_avail = c("black", "black")
-    )
-  )
-
-  par(mar = c(5, 2, 1, 2))
-
-  plot_data <- suppressWarnings(
-    ped_to_plotdf(
-      pedigree_obj,
-      aff_mark = FALSE,
-      id_lab = "display_id",
-      label = "cancer_label",
-      label_dist = c(1, 1.5, 2.1),
-      symbolsize = 1.2,
-      cex = 0.7
-    )
-  )
-
-  plot_data$df <- subset(plot_data$df, !(id %in% c("consultand-proband", "proband")))
-  plot_data <- add_proband_halo(plot_data, pedigree_df)
-
-  suppressWarnings(
-    plot_fromdf(
-      plot_data$df,
-      usr = plot_data$par_usr$usr,
-      boxw = plot_data$par_usr$boxw,
-      boxh = plot_data$par_usr$boxh
-    )
-  )
-
-  mtext("Red fill = Family member with cancer", side = 1, line = 2, cex = 0.8, col = "red")
-
-  if (grepl("*", file_content, fixed = TRUE)) {
-    mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 3, cex = 0.8, col = "black")
-  }
 }
 
 #* Health check endpoint
