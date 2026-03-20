@@ -2,19 +2,21 @@
 #
 # This Dockerfile creates a containerized R Plumber API for generating family
 # pedigree diagrams. It uses the official RStudio Plumber base image and adds
-# the kinship2 package for pedigree visualization.
+# the Pedixplorer package for pedigree visualization.
 
 # Base image: RStudio's official Plumber image with R and dependencies pre-installed
 FROM rstudio/plumber:latest
 
     # Update all system packages to latest versions for security and stability
     # Clean up apt cache to reduce image size
-    RUN apt-get update && apt-get full-upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+    RUN apt-get update && apt-get full-upgrade -y && apt-get install -y libglpk40 && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    # Install the kinship2 package from CRAN
-    # This package provides pedigree plotting and kinship calculation functions
-    # dependencies=TRUE ensures all required dependencies are also installed
-    RUN R -e "install.packages('kinship2', dependencies=TRUE, repos='http://cran.us.r-project.org')"
+    # Install Pedixplorer from Bioconductor.
+    # BiocManager is installed from CRAN first, then used to resolve the
+    # Bioconductor and CRAN dependencies required by Pedixplorer.
+    RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')"
+    RUN R -e "BiocManager::install('Pedixplorer', ask = FALSE, update = FALSE)"
+    RUN R -e "library(Pedixplorer)"
 
     # Create application directory inside the container
     RUN mkdir -p /app

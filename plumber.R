@@ -1,95 +1,243 @@
-# Elicit FHHS Pedigree API
-#
-# This Plumber API provides endpoints for generating family pedigree diagrams
-# from structured data files. It uses the kinship2 package to create visual
-# representations of family trees with cancer diagnosis information.
-#
-# Find out more about building APIs with Plumber here:
-#    https://www.rplumber.io/
-#
-
-# Load required libraries for pedigree processing and visualization
-library(plumber)    # REST API framework
-library(Matrix)     # Matrix operations
-library(quadprog)   # Quadratic programming (dependency for kinship2)
-library(kinship2)   # Pedigree plotting and kinship calculations
-
-#* @apiTitle Elicit FHHS Kinship API
-#* @apiDescription Elicit FHHS Kinship Example
-
-#* Generates a pedigree SVG image from a pedigree data frame
-#* 
+#* Generates a landscape SVG image from a pedigree data frame
+#*
 #* This endpoint accepts a tab-delimited file containing pedigree data and
-#* generates an SVG visualization of the family tree. The input file should
-#* include columns for: ID, Dadid, Momid, Sex, Status, Label, Ped, and
-#* affected status indicators (ul, ur, ll, lr representing quadrants for
-#* multiple cancer types).
+#* generates an SVG visualization of the family tree in landscape orientation (11x8.5 inches).
+#* The SVG is returned as a character string.
 #*
 #* @post /svg
 #* @param ped:file A tab-delimited file containing pedigree data
-#* @serializer svg
+#* @serializer contentType list(type="image/svg+xml")
 function(ped) {
-  # Extract the file content from the uploaded file object
-  # The ped parameter is a list where ped[[1]] contains the actual content
   file_content <- ped[[1]]
 
-  # Parse the tab-delimited file content into a data frame
-  # Expected columns: ID, Dadid, Momid, Sex, Status, Label, Ped, ul, ur, ll, lr
   data_df <- read.table(
     text = file_content,
     header = TRUE,
     sep = "\t",
     na.strings = "NA",
+    stringsAsFactors = FALSE,
+    quote = "",
+    comment.char = ""
+  )
+
+  pedigree_df <- build_pedixplorer_df(data_df)
+
+  pedigree_obj <- suppressWarnings(
+    Pedigree(
+      pedigree_df,
+      col_aff = "affection",
+      col_avail = "avail",
+      colors_aff = c("white", "red"),
+      colors_unaff = c("white", "white"),
+      colors_avail = c("black", "black")
+    )
+  )
+
+  # Create a temporary file for the SVG
+  svg_file <- tempfile(fileext = ".svg")
+  svg(filename = svg_file, width = 11, height = 8.5)
+  # Increase left and right margins to prevent text cutoff
+  # Further increase left margin to prevent text cutoff
+  par(mar = c(5, 4, 1, 4))
+
+  plot_data <- suppressWarnings(
+    ped_to_plotdf(
+      pedigree_obj,
+      aff_mark = FALSE,
+      id_lab = "display_id",
+      label = "cancer_label",
+      label_dist = c(1, 1.5, 2.1),
+      symbolsize = 1.2,
+      cex = 0.7
+    )
+  )
+
+  plot_data$df <- subset(plot_data$df, !(id %in% c("consultand-proband", "proband")))
+  plot_data <- add_proband_halo(plot_data, pedigree_df)
+
+  suppressWarnings(
+    plot_fromdf(
+      plot_data$df,
+      usr = plot_data$par_usr$usr,
+      boxw = plot_data$par_usr$boxw,
+      boxh = plot_data$par_usr$boxh
+    )
+  )
+
+  mtext("Red fill = Family member with cancer", side = 1, line = 2, cex = 0.8, col = "red")
+
+  if (grepl("*", file_content, fixed = TRUE)) {
+    mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 3, cex = 0.8, col = "black")
+  }
+
+  dev.off()
+
+  # Read SVG content and return
+  svg_content <- paste(readLines(svg_file, warn = FALSE), collapse = "\n")
+  unlink(svg_file)
+  return(svg_content)
+}
+# Elicit FHHS Pedigree API
+#
+# This Plumber API provides endpoints for generating family pedigree diagrams
+# from structured data files. It uses the Pedixplorer package to create visual
+# representations of family trees with cancer diagnosis information.
+
+library(plumber)
+library(Pedixplorer)
+
+#* @apiTitle Elicit FHHS Pedixplorer API
+#* @apiDescription Elicit FHHS pedigree rendering with Pedixplorer
+
+normalize_parent_id <- function(value) {
+  normalized <- trimws(as.character(value))
+  normalized[normalized %in% c("", "0", "NA", "N/A", "null", "NULL")] <- NA_character_
+  normalized
+}
+
+normalize_text <- function(value) {
+  normalized <- as.character(value)
+  normalized[is.na(normalized)] <- ""
+  gsub("[\t\r\n]+", " ", normalized)
+}
+
+normalize_flag <- function(value, default = FALSE) {
+  normalized <- tolower(trimws(as.character(value)))
+  result <- rep(default, length(normalized))
+  result[normalized %in% c("1", "true", "t", "yes", "y")] <- TRUE
+  result[normalized %in% c("0", "false", "f", "no", "n")] <- FALSE
+  result[normalized %in% c("", "na", "n/a", "null")] <- default
+  result
+}
+
+add_proband_halo <- function(plot_data, pedigree_df) {
+  proband_rows <- pedigree_df[pedigree_df$proband, , drop = FALSE]
+
+  if (nrow(proband_rows) == 0) {
+    return(plot_data)
+  }
+
+  proband_row <- proband_rows[1, , drop = FALSE]
+  halo_color <- "#33a33b"
+  boxh <- plot_data$par_usr$boxh
+
+  node_rows <- plot_data$df[
+    plot_data$df$id == "polygon" & grepl(proband_row$display_id, plot_data$df$tips, fixed = TRUE),
+    ,
+    drop = FALSE
+  ]
+
+  if (nrow(node_rows) == 0) {
+    return(plot_data)
+  }
+
+  proband_shape <- if (proband_row$sex == 1L) 0 else if (proband_row$sex == 2L) 1 else 5
+    halo_cex <- if (proband_row$sex == 2L) 5 else 6
+
+  if (!"pch" %in% names(plot_data$df)) {
+    plot_data$df$pch <- NA_real_
+  }
+
+  halo_row <- data.frame(
+    id = "proband_halo",
+    x0 = node_rows$x0[1],
+    y0 = node_rows$y0[1] + (boxh / 2),
+    x1 = NA_real_,
+    y1 = NA_real_,
+    type = "points",
+    fill = halo_color,
+    border = NA_character_,
+    angle = NA_real_,
+    density = NA_real_,
+    cex = halo_cex,
+    label = NA_character_,
+    tips = "",
+      lwd = 5,
+    adjx = NA_real_,
+    adjy = NA_real_,
+    lty = NA_real_,
+    pch = proband_shape,
     stringsAsFactors = FALSE
   )
-  
-  # Create affected status matrix for kinship2
-  # The four columns (UL, UR, LL, LR) represent quadrants of the pedigree symbol
-  # allowing visualization of up to 4 different cancer types per individual
-  aff <- data.frame(UL=data_df$ul, UR=data_df$ur, LL=data_df$ll, lr=data_df$lr)
-  
-  # Format individual labels: combine ID with formatted label text
-  # Replace underscores with spaces and hyphens with newlines for readability
-  ids <- paste(data_df$ID, gsub("_", " ",gsub("-", "\n", data_df$Label)), sep="\n")
-  
-  # Assign colors based on individual status:
-  # Green (3) = ID 7 (respondent)
-  # Red (2) = Has cancer diagnosis (any affected quadrant > 0)
-  # Black (1) = Unaffected
-  cols <- c(ifelse(data_df$ID == 7, 3,ifelse(data_df$ul + data_df$ur + data_df$ll + data_df$lr > 0  ,2 ,1)))
-  
-  # Create the pedigree object with all family relationship and status data
-  # Wrap in suppressWarnings to prevent deprecation warnings from corrupting SVG output
-  myped <- suppressWarnings(pedigree(id=data_df$ID, dadid=data_df$Dadid, momid=data_df$Momid, sex=data_df$Sex, status=data_df$Status, affected=as.matrix(aff), famid=data_df$Ped))
 
-  # Configure plot margins to accommodate legend text at bottom
-  # Format: c(bottom, left, top, right) - extra space at bottom for 3-4 legend lines
-  par(mar = c(6, 2, 1, 2))
+  plot_data$df <- rbind(halo_row, plot_data$df)
+  plot_data
+}
 
-  # Generate the pedigree plot for family '1'
-  # symbolsize: controls the size of pedigree symbols
-  # col: vector of colors (green for respondent, red for affected, black for unaffected)
-  # cex: character expansion factor for text size
-  # Wrap in suppressWarnings to prevent deprecation warnings from corrupting SVG output
-  suppressWarnings(plot(myped['1'], ids, symbolsize = 1.2, col=cols, cex=.7))
+build_pedixplorer_df <- function(data_df) {
+  names(data_df) <- tolower(names(data_df))
 
-  # Add legend lines at the bottom of the plot
-  # side 1 = bottom, line = distance from plot area, cex = text size
-  mtext("Green = Respondent", side = 1, line = 2, cex = 0.8, col = "green")
-  mtext("Red = Family member with cancer", side = 1, line = 3, cex = 0.8, col = "red")
+  has_legacy_quadrants <- all(c("ul", "ur", "ll", "lr") %in% names(data_df))
 
-  # Conditionally add asterisk explanation if data contains multiple diagnoses
-  # The '*' character in labels indicates multiple occurrences of the same cancer type
-  if (grepl("*", file_content, fixed = TRUE)) {
-    mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 4, cex = 0.8, col = "black")
+  famid <- if ("famid" %in% names(data_df)) {
+    normalize_text(data_df$famid)
+  } else if ("ped" %in% names(data_df)) {
+    normalize_text(data_df$ped)
+  } else {
+    rep("1", nrow(data_df))
   }
+
+  id <- normalize_text(data_df$id)
+  dadid <- if ("dadid" %in% names(data_df)) normalize_parent_id(data_df$dadid) else rep(NA_character_, nrow(data_df))
+  momid <- if ("momid" %in% names(data_df)) normalize_parent_id(data_df$momid) else rep(NA_character_, nrow(data_df))
+  sex <- suppressWarnings(as.integer(data_df$sex))
+  sex[is.na(sex)] <- 3L
+
+  proband <- if ("proband" %in% names(data_df)) {
+    normalize_flag(data_df$proband)
+  } else {
+    id == "7"
+  }
+
+  affection <- if ("affection" %in% names(data_df)) {
+    normalize_flag(data_df$affection)
+  } else if (has_legacy_quadrants) {
+    rowSums(data_df[, c("ul", "ur", "ll", "lr")], na.rm = TRUE) > 0
+  } else {
+    rep(FALSE, nrow(data_df))
+  }
+
+  deceased <- if ("deceased" %in% names(data_df)) {
+    normalize_flag(data_df$deceased)
+  } else if ("status" %in% names(data_df)) {
+    trimws(as.character(data_df$status)) %in% c("1", "deceased", "DECEASED")
+  } else {
+    rep(FALSE, nrow(data_df))
+  }
+
+  display_id <- if ("display_id" %in% names(data_df)) {
+    normalize_text(data_df$display_id)
+  } else if ("label" %in% names(data_df)) {
+    normalize_text(gsub("_", " ", data_df$label))
+  } else {
+    id
+  }
+
+  cancer_label <- if ("cancer_label" %in% names(data_df)) {
+    normalize_text(data_df$cancer_label)
+  } else {
+    rep("", nrow(data_df))
+  }
+
+  data.frame(
+    famid = famid,
+    id = id,
+    dadid = dadid,
+    momid = momid,
+    sex = sex,
+    deceased = deceased,
+    proband = proband,
+    affection = affection,
+    avail = FALSE,
+    display_id = display_id,
+    cancer_label = cancer_label,
+    stringsAsFactors = FALSE
+  )
 }
 
 #* Health check endpoint
-#* 
+#*
 #* Returns a simple status object to verify the API is running and responsive.
-#* Used by container orchestration systems (Docker, Kubernetes) to monitor
-#* service health.
 #*
 #* @get /healthz
 function() {
