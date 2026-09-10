@@ -101,6 +101,27 @@ normalize_text <- function(value) {
   gsub("[\t\r\n]+", " ", normalized)
 }
 
+wrap_cancer_label <- function(text, width = 26) {
+  vapply(text, function(x) {
+    if (is.na(x) || !nzchar(trimws(x))) return(x)
+    entries <- trimws(strsplit(x, ";")[[1]])
+    entries <- entries[nzchar(entries)]
+    lines <- character(0)
+    current <- ""
+    for (entry in entries) {
+      candidate <- if (nzchar(current)) paste(current, entry, sep = "; ") else entry
+      if (nzchar(current) && nchar(candidate) > width) {
+        lines <- c(lines, current)
+        current <- entry
+      } else {
+        current <- candidate
+      }
+    }
+    if (nzchar(current)) lines <- c(lines, current)
+    paste(lines, collapse = "\n")
+  }, FUN.VALUE = character(1), USE.NAMES = FALSE)
+}
+
 normalize_flag <- function(value, default = FALSE) {
   normalized <- tolower(trimws(as.character(value)))
   result <- rep(default, length(normalized))
@@ -218,6 +239,7 @@ build_pedixplorer_df <- function(data_df) {
   } else {
     rep("", nrow(data_df))
   }
+  cancer_label <- wrap_cancer_label(cancer_label)
 
   data.frame(
     famid = famid,
