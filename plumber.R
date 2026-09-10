@@ -21,6 +21,8 @@ function(ped) {
   )
 
   pedigree_df <- build_pedixplorer_df(data_df)
+  layout_scale <- attr(pedigree_df, "layout_scale")
+  if (is.null(layout_scale)) layout_scale <- 1
 
   pedigree_obj <- suppressWarnings(
     Pedigree(
@@ -47,13 +49,13 @@ function(ped) {
       id_lab = "display_id",
       label = "cancer_label",
       label_dist = c(1, 1.5, 2.1),
-      symbolsize = 1.2,
-      cex = 0.7
+      symbolsize = 1.2 * layout_scale,
+      cex = 0.7 * layout_scale
     )
   )
 
   plot_data$df <- subset(plot_data$df, !(id %in% c("consultand-proband", "proband")))
-  plot_data <- add_proband_halo(plot_data, pedigree_df)
+  plot_data <- add_proband_halo(plot_data, pedigree_df, layout_scale)
 
   suppressWarnings(
     plot_fromdf(
@@ -122,6 +124,28 @@ wrap_cancer_label <- function(text, width = 26) {
   }, FUN.VALUE = character(1), USE.NAMES = FALSE)
 }
 
+compute_layout_scale <- function(id, dadid, momid, comfortable_width = 4, min_scale = 0.45) {
+  n <- length(id)
+  if (n <= comfortable_width) {
+    return(1)
+  }
+
+  dadid_k <- ifelse(is.na(dadid), "0", dadid)
+  momid_k <- ifelse(is.na(momid), "0", momid)
+
+  depth <- tryCatch(
+    suppressWarnings(kindepth(id, dadid_k, momid_k)),
+    error = function(e) rep(0, n)
+  )
+
+  max_gen_width <- max(table(depth))
+  if (max_gen_width <= comfortable_width) {
+    return(1)
+  }
+
+  max(min_scale, comfortable_width / max_gen_width)
+}
+
 normalize_flag <- function(value, default = FALSE) {
   normalized <- tolower(trimws(as.character(value)))
   result <- rep(default, length(normalized))
@@ -131,7 +155,7 @@ normalize_flag <- function(value, default = FALSE) {
   result
 }
 
-add_proband_halo <- function(plot_data, pedigree_df) {
+add_proband_halo <- function(plot_data, pedigree_df, layout_scale = 1) {
   proband_rows <- pedigree_df[pedigree_df$proband, , drop = FALSE]
 
   if (nrow(proband_rows) == 0) {
@@ -153,7 +177,7 @@ add_proband_halo <- function(plot_data, pedigree_df) {
   }
 
   proband_shape <- if (proband_row$sex == 1L) 0 else if (proband_row$sex == 2L) 1 else 5
-    halo_cex <- if (proband_row$sex == 2L) 5 else 6
+  halo_cex <- (if (proband_row$sex == 2L) 5 else 6) * layout_scale
 
   if (!"pch" %in% names(plot_data$df)) {
     plot_data$df$pch <- NA_real_
@@ -241,7 +265,7 @@ build_pedixplorer_df <- function(data_df) {
   }
   cancer_label <- wrap_cancer_label(cancer_label)
 
-  data.frame(
+  result <- data.frame(
     famid = famid,
     id = id,
     dadid = dadid,
@@ -255,6 +279,12 @@ build_pedixplorer_df <- function(data_df) {
     cancer_label = cancer_label,
     stringsAsFactors = FALSE
   )
+
+  # Large families get packed tighter horizontally by Pedixplorer's own
+  # layout, but it does not shrink text/symbols to match - so scale those
+  # down here in proportion to the widest generation to keep them legible.
+  attr(result, "layout_scale") <- compute_layout_scale(id, dadid, momid)
+  result
 }
 
 #* Health check endpoint
