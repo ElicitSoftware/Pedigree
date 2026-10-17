@@ -1,0 +1,73 @@
+# Builds the Pedigree image and smoke-tests the running service on every pull request into
+# main and every push to it. Pedigree is an R plumber service with no test suite of its own,
+# so the image build (which installs Pedixplorer from Bioconductor) and two probes against
+# the running container are what prove a change still serves a pedigree. The release
+# workflow (maven.yml) builds and pushes the multi-arch image at tag-push time and runs
+# nothing before it, so without this workflow nothing exercised the service before a tag.
+#
+# The job name is the status check the branch ruleset on main requires; rename both together.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  smoke:
+    name: Build image and smoke-test
+    runs-on: ubuntu-latest
+    # The Bioconductor install dominates; a cold build takes well over ten minutes.
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Single platform and no push: the multi-arch release image is maven.yml's job. The
+      # layer cache keeps the R package install from repeating on every run.
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: elicitsoftware/pedigree:ci
+          cache-from: type=gha
+          cache-to: type=gha
+
+      - name: Start the service
+        run: docker run -d --name pedigree -p 8083:8080 elicitsoftware/pedigree:ci
+
+      - name: Wait for /healthz
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8083/healthz >/dev/null 2>&1; then
+              curl -fsS http://localhost:8083/healthz; echo
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "pedigree did not become healthy within two minutes" >&2
+          exit 1
+
+      # ped1.txt is the sample pedigree the README posts; the response has to be an SVG document.
+      - name: Render the sample pedigree
+        run: |
+          curl -fsS -o ped1.svg -F "ped=@ped1.txt" http://localhost:8083/svg
+          if ! grep -q "<svg" ped1.svg; then
+            echo "response is not SVG:" >&2
+            head -c 500 ped1.svg >&2
+            exit 1
+          fi
+          echo "rendered $(wc -c < ped1.svg | tr -d ' ') bytes of SVG"
+
+      - name: Service logs
+        if: failure()
+        run: docker logs pedigree

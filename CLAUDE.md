@@ -16,5 +16,10 @@ Maven in this module; the image is built with `buildDockerImage.sh`.
 
 ## Git Commits
 
+- `main` changes only through a pull request whose CI check (image build plus a smoke test
+  of `/healthz` and `/svg`) passed; a ruleset enforces it on GitHub and
+  `.claude/hooks/branch-guard.py` (a `PreToolUse` hook in `.claude/settings.json`) refuses
+  `git commit` and `git push` on `main` locally. Branch as `<type>/<issue>-<slug>`; never set
+  the hook's `ELICIT_ALLOW_PROTECTED` override yourself.
 - Never append a `Co-Authored-By: Claude` (or similar AI co-author) trailer to
   commit messages.
