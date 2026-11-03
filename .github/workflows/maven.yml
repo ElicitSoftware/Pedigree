@@ -39,6 +39,17 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # A manual run has no tag to name the image after; refuse it rather than push a branch.
+      - name: Release from a tag only
+        run: |
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            echo "::error::Release images are built from a tag (v3.0.0, v3.0.0-beta.1); $GITHUB_REF is not one."
+            exit 1
+          fi
+
+      # A version with a pre-release part (v3.0.0-beta.1) is pushed under its exact tag only:
+      # metadata-action applies only {{version}} to a pre-release, and latest is enabled only
+      # for a tag without a hyphen. :<major.minor> and :latest move only for a final version.
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -46,7 +57,7 @@ jobs:
           images: elicitsoftware/pedigree
           tags: |
             type=ref,event=tag
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
