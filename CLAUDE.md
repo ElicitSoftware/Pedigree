@@ -1,6 +1,6 @@
 # Elicit Pedigree — Claude Context
 
-R/Kinship2 pedigree-drawing service exposed over HTTP by `plumber`
+R/Pedixplorer pedigree-drawing service exposed over HTTP by `plumber`
 (`plumber.R`). FHHS calls it to render pedigree images; the umbrella compose
 stack publishes it on port `8083`. There is no Java, Quarkus, Vaadin, or
 Maven in this module; the image is built with `buildDockerImage.sh`.

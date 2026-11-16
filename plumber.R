@@ -8,6 +8,9 @@
 #* @param ped:file A tab-delimited file containing pedigree data
 #* @serializer contentType list(type="image/svg+xml")
 function(ped) {
+  # Requests are handled one at a time, so a device still open here was left by an earlier one
+  graphics.off()
+
   file_content <- ped[[1]]
 
   data_df <- read.table(
@@ -38,6 +41,12 @@ function(ped) {
   # Create a temporary file for the SVG
   svg_file <- tempfile(fileext = ".svg")
   svg(filename = svg_file, width = 11, height = 8.5)
+  # Close this request's device and remove its file however the function exits
+  dev_id <- dev.cur()
+  on.exit({
+    if (dev_id %in% dev.list()) dev.off(dev_id)
+    unlink(svg_file)
+  }, add = TRUE)
   # Increase left and right margins to prevent text cutoff
   # Further increase left margin to prevent text cutoff
   par(mar = c(5, 4, 1, 4))
@@ -72,11 +81,10 @@ function(ped) {
     mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 3, cex = 0.8, col = "black")
   }
 
-  dev.off()
+  dev.off(dev_id)
 
   # Read SVG content and return
   svg_content <- paste(readLines(svg_file, warn = FALSE), collapse = "\n")
-  unlink(svg_file)
   return(svg_content)
 }
 # Elicit FHHS Pedigree API
@@ -211,31 +219,32 @@ add_proband_halo <- function(plot_data, pedigree_df, layout_scale = 1) {
 
 build_pedixplorer_df <- function(data_df) {
   names(data_df) <- tolower(names(data_df))
+  # Columns are read with [[ ]], which matches a column name exactly ($ would also accept a prefix)
 
   has_legacy_quadrants <- all(c("ul", "ur", "ll", "lr") %in% names(data_df))
 
   famid <- if ("famid" %in% names(data_df)) {
-    normalize_text(data_df$famid)
+    normalize_text(data_df[["famid"]])
   } else if ("ped" %in% names(data_df)) {
-    normalize_text(data_df$ped)
+    normalize_text(data_df[["ped"]])
   } else {
     rep("1", nrow(data_df))
   }
 
-  id <- normalize_text(data_df$id)
-  dadid <- if ("dadid" %in% names(data_df)) normalize_parent_id(data_df$dadid) else rep(NA_character_, nrow(data_df))
-  momid <- if ("momid" %in% names(data_df)) normalize_parent_id(data_df$momid) else rep(NA_character_, nrow(data_df))
-  sex <- suppressWarnings(as.integer(data_df$sex))
+  id <- normalize_text(data_df[["id"]])
+  dadid <- if ("dadid" %in% names(data_df)) normalize_parent_id(data_df[["dadid"]]) else rep(NA_character_, nrow(data_df))
+  momid <- if ("momid" %in% names(data_df)) normalize_parent_id(data_df[["momid"]]) else rep(NA_character_, nrow(data_df))
+  sex <- suppressWarnings(as.integer(data_df[["sex"]]))
   sex[is.na(sex)] <- 3L
 
   proband <- if ("proband" %in% names(data_df)) {
-    normalize_flag(data_df$proband)
+    normalize_flag(data_df[["proband"]])
   } else {
     id == "7"
   }
 
   affection <- if ("affection" %in% names(data_df)) {
-    normalize_flag(data_df$affection)
+    normalize_flag(data_df[["affection"]])
   } else if (has_legacy_quadrants) {
     rowSums(data_df[, c("ul", "ur", "ll", "lr")], na.rm = TRUE) > 0
   } else {
@@ -243,23 +252,23 @@ build_pedixplorer_df <- function(data_df) {
   }
 
   deceased <- if ("deceased" %in% names(data_df)) {
-    normalize_flag(data_df$deceased)
+    normalize_flag(data_df[["deceased"]])
   } else if ("status" %in% names(data_df)) {
-    trimws(as.character(data_df$status)) %in% c("1", "deceased", "DECEASED")
+    trimws(as.character(data_df[["status"]])) %in% c("1", "deceased", "DECEASED")
   } else {
     rep(FALSE, nrow(data_df))
   }
 
   display_id <- if ("display_id" %in% names(data_df)) {
-    normalize_text(data_df$display_id)
+    normalize_text(data_df[["display_id"]])
   } else if ("label" %in% names(data_df)) {
-    normalize_text(gsub("_", " ", data_df$label))
+    normalize_text(gsub("_", " ", data_df[["label"]]))
   } else {
     id
   }
 
   cancer_label <- if ("cancer_label" %in% names(data_df)) {
-    normalize_text(data_df$cancer_label)
+    normalize_text(data_df[["cancer_label"]])
   } else {
     rep("", nrow(data_df))
   }
