@@ -12,6 +12,10 @@ token gets 401. The token and the presented header are never logged; keep it tha
 `ci/smoke.sh` supplies a test literal of its own (`SMOKE_TOKEN` overrides it) and checks all
 of these answers.
 
+The image runs the service as an unprivileged user (uid 10001, `USER` in the `Dockerfile`),
+with `/app` owned by root, and `plumber.R` refuses a request body over 1 MB with 413
+(`plumber.maxRequestSize`). `ci/smoke.sh` checks both.
+
 ## MCP Servers and Skills
 
 - **IntelliJ IDEA (`idea` MCP server)** — when the workspace is open in the

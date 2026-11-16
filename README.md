@@ -96,6 +96,12 @@ Every path except `GET /healthz` requires the header `Authorization: Bearer <tok
 | The header carries the configured token | The request proceeds. |
 
 A token that is set but shorter than 32 characters stops the service from starting; the message names the variable and the required length, never the value. Neither the token nor the header a caller presented is written to the log or to a response.
+
+### Limits and the Container User
+
+A request body larger than 1 MB is refused with `413`; a pedigree file is a few kilobytes.
+
+The service runs in the container as an unprivileged user (uid 10001). It writes only to R's temporary directory under `/tmp`, and `/app` is read-only to it.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 <!-- ROADMAP
 ## Roadmap

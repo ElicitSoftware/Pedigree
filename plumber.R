@@ -99,6 +99,10 @@ library(Pedixplorer)
 #* @apiTitle Elicit FHHS Pedixplorer API
 #* @apiDescription Elicit FHHS pedigree rendering with Pedixplorer
 
+# A pedigree file is a few kilobytes. A request body over this many bytes is refused with
+# 413 (plumber 1.1.0 or later; ci/smoke.sh checks that the installed plumber honors it).
+options(plumber.maxRequestSize = 1e6)
+
 # The service token: the value a caller presents as "Authorization: Bearer <token>".
 # It is read once, here, and removed from the environment; it is never printed.
 service_token_variable <- "ELICIT_SERVICE_TOKEN"
