@@ -48,8 +48,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # A candidate that does not answer /healthz or draw the sample pedigree stops the
-      # release here, before the login and the push.
+      # A candidate that does not answer /healthz, does not require the service token on /svg
+      # or does not draw the sample pedigree stops the release here, before the login and the
+      # push. The token is the script's own literal for this test, not a secret.
       - name: Smoke-test the candidate
         run: ci/smoke.sh elicitsoftware/pedigree:candidate
 

@@ -99,6 +99,82 @@ library(Pedixplorer)
 #* @apiTitle Elicit FHHS Pedixplorer API
 #* @apiDescription Elicit FHHS pedigree rendering with Pedixplorer
 
+# The service token: the value a caller presents as "Authorization: Bearer <token>".
+# It is read once, here, and removed from the environment; it is never printed.
+service_token_variable <- "ELICIT_SERVICE_TOKEN"
+service_token_min_length <- 32L
+service_token <- trimws(Sys.getenv(service_token_variable, unset = ""))
+Sys.unsetenv(service_token_variable)
+
+service_token_length <- nchar(service_token, type = "chars", allowNA = TRUE)
+if (nzchar(service_token) && (is.na(service_token_length) || service_token_length < service_token_min_length)) {
+  # Names the variable and the length required, never the value or its length
+  stop(
+    service_token_variable, " must be at least ", service_token_min_length,
+    " characters long; refusing to start.",
+    call. = FALSE
+  )
+}
+if (!nzchar(service_token)) {
+  message(
+    "WARNING: ", service_token_variable, " is not set; every request except /healthz ",
+    "is answered with 503 until it is."
+  )
+}
+
+# R has no constant-time comparison, and == stops at the first differing byte. Both values
+# are therefore reduced to HMAC-SHA-256 digests under a key drawn once per process, and the
+# digests are compared over their whole length.
+service_token_compare_key <- sodium::random(32)
+
+service_token_digest <- function(value) {
+  sodium::sha256(charToRaw(enc2utf8(value)), key = service_token_compare_key)
+}
+
+service_token_matches <- function(presented) {
+  difference <- xor(service_token_digest(presented), service_token_digest(service_token))
+  sum(as.integer(difference)) == 0L
+}
+
+# The token of an "Authorization: Bearer <token>" header, or NULL for anything else
+bearer_token <- function(header) {
+  if (is.null(header) || length(header) != 1L || is.na(header)) {
+    return(NULL)
+  }
+  match <- regmatches(header, regexec("^[Bb][Ee][Aa][Rr][Ee][Rr] +([^ ]+) *$", header))[[1]]
+  if (length(match) == 2L) match[2] else NULL
+}
+
+#* Requires the service token on every path except /healthz
+#*
+#* A route added later is protected unless it is named here. Without a configured token
+#* nothing is served (503); a missing, malformed or wrong credential is answered the same
+#* way (401), so a caller cannot tell them apart.
+#*
+#* @filter service_token
+function(req, res) {
+  if (identical(req$PATH_INFO, "/healthz")) {
+    return(plumber::forward())
+  }
+
+  if (!nzchar(service_token)) {
+    res$status <- 503
+    res$setHeader("Content-Type", "application/json")
+    res$body <- '{"error":"service token not configured"}'
+    return(res)
+  }
+
+  presented <- bearer_token(req$HTTP_AUTHORIZATION)
+  if (is.null(presented) || !service_token_matches(presented)) {
+    res$status <- 401
+    res$setHeader("WWW-Authenticate", "Bearer")
+    res$body <- ""
+    return(res)
+  }
+
+  plumber::forward()
+}
+
 normalize_parent_id <- function(value) {
   normalized <- trimws(as.character(value))
   normalized[normalized %in% c("", "0", "NA", "N/A", "null", "NULL")] <- NA_character_
