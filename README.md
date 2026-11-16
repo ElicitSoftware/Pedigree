@@ -42,7 +42,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
   <p align="left">
-    <a href="https://github.com/elicitsoftware/elicit">Elicit Software</a> was designed and developed by <a href="https://www.michiganmedicine.org/">Michigan Medicine</a>. Pedigree is one module build to display family pedigree images for the <a href="https://github.com/elicitsoftware/FHHS">Family Health History Survey</a> project. It is a simple wrapper using Plumber and Docker to convienently package the Kinship2 package.
+    <a href="https://github.com/elicitsoftware/elicit">Elicit Software</a> was designed and developed by <a href="https://www.michiganmedicine.org/">Michigan Medicine</a>. Pedigree is one module built to display family pedigree images for the <a href="https://github.com/elicitsoftware/FHHS">Family Health History Survey</a> project. It is a simple wrapper using Plumber and Docker to conveniently package the Pedixplorer package.
   </p>
 
 <div align="center"><image src="images/sample_pedigree.svg" height=600></div>
@@ -62,18 +62,24 @@ This application is designed to run in a container.
 
 ### Running the Container
 
-Start the Docker container with:
+The service listens on port 8080 inside the container. Start it with that port published on host port 8083, replacing `<version>` with a released tag:
 
 ```sh
-docker run -p 8000:8000 --name pedigree elicitsoftware/pedigree:1.0.0-alpha.1
+docker run -d --name pedigree -p 8083:8080 elicitsoftware/pedigree:<version>
+```
+
+Check that it is up:
+
+```sh
+curl http://localhost:8083/healthz
 ```
 
 ### Submitting a Request
 
-To generate a pedigree SVG, post a request using a sample file (e.g., `ped1.txt`):
+To generate a pedigree SVG, post a request using a sample file (e.g., `ped1.txt` in this repository):
 
 ```sh
-curl -X POST -F "ped=@/full-path-to-directory/ped1.txt" http://localhost:8000/svg
+curl -F "ped=@ped1.txt" -o ped1.svg http://localhost:8083/svg
 ```
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 <!-- ROADMAP
@@ -90,7 +96,7 @@ See the [open issues](https://github.com/ElicitSoftware/Elicit/issues) for a ful
 
 <!-- LICENSE -->
 ## License
-Released under the MIT License with in the hope it will be usefull to others.
+Released under the MIT License in the hope it will be useful to others.
 
 See `LICENSE.md` for more information.
 

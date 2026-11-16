@@ -2,19 +2,19 @@
 
 # Elicit FHHS Pedigree API - Docker Image Build Script
 #
-# This script builds a multi-architecture Docker image for the Pedigree API
-# using Docker Buildx. The resulting image can run on multiple platforms
-# (e.g., amd64, arm64) from a single build.
+# This script builds the Docker image for the Pedigree API with Docker Buildx,
+# for the platform of the machine it runs on, and loads it into the local
+# Docker daemon. The multi-architecture release image (amd64, arm64) is built
+# and pushed by the release workflow (.github/workflows/maven.yml), not here.
 #
 # Usage: ./buildDockerImage.sh
 #
 # Prerequisites:
 # - Docker with Buildx support (Docker Desktop or Docker Engine 19.03+)
-# - Buildx builder instance configured for multi-platform builds
 
-# Build the multi-architecture Docker image
+# Build the Docker image for the local platform
 # --no-cache: Forces a fresh build without using cached layers (ensures latest dependencies)
 # -t elicitsoftware/pedigree:latest: Tags the image with repository name and version
-# --load: Loads the built image into the local Docker daemon (required for single-platform builds)
+# --load: Loads the built image into the local Docker daemon (a single-platform build)
 # .: Build context is the current directory (where Dockerfile is located)
 docker buildx build --no-cache -t elicitsoftware/pedigree:latest --load .

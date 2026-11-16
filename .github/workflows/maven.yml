@@ -1,10 +1,12 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# Release workflow: builds the Pedigree image for linux/amd64 and linux/arm64 and pushes it
+# to Docker Hub when a version tag (v3.0.0, v3.0.0-beta.1) is pushed. Before anything is
+# pushed, the image is built for the runner's platform and smoke-tested with ci/smoke.sh,
+# the script ci.yml runs on every pull request; the multi-arch build then reuses its layers.
+# The arm64 half is built under QEMU and is not run here.
+#
+# The file keeps its historical name; nothing in it uses Maven.
+#
+# Actions are pinned to a commit, with the version it belongs to beside it; move both together.
 
 name: Build and Push Multi-Arch Docker Image
 
@@ -17,42 +19,46 @@ on:
 jobs:
   build:
     name: Build and Push Multi-Arch Image
+    # Release images are built from a version tag only. A manual run from a branch has no tag
+    # to name the image after, so the whole job is skipped before any step runs.
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
 
     steps:
       - name: Check out repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Add support for more platforms with QEMU
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v4
+      # Single platform and loaded into the runner's Docker, so it can be run. Its layers go
+      # to the cache the multi-platform build below reads.
+      - name: Build the candidate image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          context: .
+          load: true
+          tags: elicitsoftware/pedigree:candidate
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      # A manual run has no tag to name the image after; refuse it rather than push a branch.
-      - name: Release from a tag only
-        run: |
-          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-            echo "::error::Release images are built from a tag (v3.0.0, v3.0.0-beta.1); $GITHUB_REF is not one."
-            exit 1
-          fi
+      # A candidate that does not answer /healthz or draw the sample pedigree stops the
+      # release here, before the login and the push.
+      - name: Smoke-test the candidate
+        run: ci/smoke.sh elicitsoftware/pedigree:candidate
 
       # A version with a pre-release part (v3.0.0-beta.1) is pushed under its exact tag only:
       # metadata-action applies only {{version}} to a pre-release, and latest is enabled only
       # for a tag without a hyphen. :<major.minor> and :latest move only for a final version.
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: elicitsoftware/pedigree
           tags: |
@@ -61,8 +67,15 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
+      # Logged in only for the push that needs it.
+      - name: Login to DockerHub
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and Push Multi-Platform Image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
