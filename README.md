@@ -62,11 +62,14 @@ This application is designed to run in a container.
 
 ### Running the Container
 
-The service listens on port 8080 inside the container. Start it with that port published on host port 8083, replacing `<version>` with a released tag:
+The service listens on port 8080 inside the container. Callers authenticate with the Elicit platform's service token, which the container reads from the `ELICIT_SERVICE_TOKEN` environment variable. Generate one (at least 32 characters) and start the container with port 8080 published on host port 8083, replacing `<version>` with a released tag:
 
 ```sh
-docker run -d --name pedigree -p 8083:8080 elicitsoftware/pedigree:<version>
+export ELICIT_SERVICE_TOKEN="$(openssl rand -hex 32)"
+docker run -d --name pedigree -p 8083:8080 -e ELICIT_SERVICE_TOKEN elicitsoftware/pedigree:<version>
 ```
+
+Use the same value that the calling service (FHHS) is given.
 
 Check that it is up:
 
@@ -79,8 +82,20 @@ curl http://localhost:8083/healthz
 To generate a pedigree SVG, post a request using a sample file (e.g., `ped1.txt` in this repository):
 
 ```sh
-curl -F "ped=@ped1.txt" -o ped1.svg http://localhost:8083/svg
+curl -H "Authorization: Bearer $ELICIT_SERVICE_TOKEN" -F "ped=@ped1.txt" -o ped1.svg http://localhost:8083/svg
 ```
+
+### The Service Token
+
+Every path except `GET /healthz` requires the header `Authorization: Bearer <token>`. That includes `POST /svg` and the Swagger/OpenAPI pages (`/__docs__/`, `/openapi.json`). `/healthz` stays open, so a liveness probe needs no credential, and it answers 200 whether or not a token is configured.
+
+| Situation | Answer |
+| --- | --- |
+| `ELICIT_SERVICE_TOKEN` is unset or blank | `503` with the body `{"error":"service token not configured"}`. The service starts and logs one warning that names the variable, but draws nothing. |
+| The header is missing, is not a `Bearer` credential, or carries a wrong token | `401` with `WWW-Authenticate: Bearer` and an empty body. The three cases are answered identically. |
+| The header carries the configured token | The request proceeds. |
+
+A token that is set but shorter than 32 characters stops the service from starting; the message names the variable and the required length, never the value. Neither the token nor the header a caller presented is written to the log or to a response.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 <!-- ROADMAP
 ## Roadmap

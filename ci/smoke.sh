@@ -3,10 +3,14 @@
 # Elicit FHHS Pedigree API - Smoke Test
 #
 # Pedigree has no test suite of its own; this script is what proves an image still serves
-# a pedigree. It starts a container from the image, waits for /healthz, posts the sample
-# pedigree (ped1.txt, the one the README posts) to /svg and checks that the answer is an
-# SVG document and that the drawing left no temporary file behind. Both workflows run it:
-# ci.yml on every pull request, and the release workflow before it pushes anything.
+# a pedigree. It starts a container from the image with a service token, waits for /healthz,
+# checks that /svg refuses a request without the token or with a wrong one (401), posts the
+# sample pedigree (ped1.txt, the one the README posts) to /svg with the token and checks
+# that the answer is an SVG document and that the drawing left no temporary file behind.
+# Given an image, it then starts it twice more: without a token (/healthz 200, /svg 503)
+# and with a token that is too short (the container must exit). No service log may contain
+# a token. Both workflows run it: ci.yml on every pull request, and the release workflow
+# before it pushes anything.
 #
 # Usage: ci/smoke.sh <image>               start a container from the image and test it
 #        ci/smoke.sh --url <base address>  test a service that is already running,
@@ -16,6 +20,9 @@
 #   SMOKE_PORT       host port the container is published on (default 8083)
 #   SMOKE_CONTAINER  name of the container (default pedigree-smoke); with --url, name the
 #                    running container here to include the temporary-file check
+#   SMOKE_TOKEN      the service token: given to the container as ELICIT_SERVICE_TOKEN, or,
+#                    with --url, the token the running service was started with. The default
+#                    is a literal for this test only, never the token of a real site.
 #
 # Prerequisites: docker (not needed with --url) and curl.
 
@@ -33,46 +40,103 @@ elif [[ $# -eq 1 && "$1" != -* ]]; then
   base_url="http://localhost:${port}"
   container="${SMOKE_CONTAINER:-pedigree-smoke}"
 else
-  sed -n '11,13p' "$0" | sed 's/^# //' >&2
+  sed -n '15,17p' "$0" | sed 's/^# //' >&2
   exit 2
 fi
 
+token="${SMOKE_TOKEN:-pedigree-ci-smoke-token-not-for-a-real-site}"
+# The same length as the token, so only the value differs.
+wrong_token="${token%?}"
+if [[ "$token" == *x ]]; then wrong_token+="y"; else wrong_token+="x"; fi
+short_token="too-short-for-a-token"
+no_token_container="${container}-no-token"
+short_token_container="${container}-short-token"
+
 svg_out="$(mktemp)"
+headers_out="$(mktemp)"
 
 # Runs on every exit: show the service log when a check failed, then remove what was started.
 finish() {
   status=$?
-  rm -f "$svg_out"
+  rm -f "$svg_out" "$headers_out"
   if [[ -n "$image" ]]; then
     if [[ $status -ne 0 ]]; then
       echo "--- service log ---" >&2
       docker logs "$container" >&2 2>&1 || true
     fi
-    docker rm -f "$container" >/dev/null 2>&1 || true
+    docker rm -f "$container" "$no_token_container" "$short_token_container" >/dev/null 2>&1 || true
   fi
   exit $status
 }
 trap finish EXIT
 
 if [[ -n "$image" ]]; then
-  docker run -d --name "$container" -p "${port}:8080" "$image" >/dev/null
+  docker run -d --name "$container" -p "${port}:8080" -e ELICIT_SERVICE_TOKEN="$token" "$image" >/dev/null
   echo "started $container from $image on port $port"
 fi
 
 # R loads Pedixplorer before plumber listens, so the first answers can take a while.
-healthy=0
-for _ in $(seq 1 60); do
-  if curl -fsS "$base_url/healthz" >/dev/null 2>&1; then
-    healthy=1
-    break
-  fi
-  sleep 2
-done
-if [[ $healthy -ne 1 ]]; then
+# /healthz is asked without a credential: it has to stay open to probes.
+wait_healthy() {
+  for _ in $(seq 1 60); do
+    if curl -fsS "$base_url/healthz" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
   echo "pedigree did not become healthy within two minutes" >&2
-  exit 1
-fi
+  return 1
+}
+
+# Posts the sample pedigree to /svg with the given curl options, keeps the body in $svg_out
+# and the response headers in $headers_out, and prints the status code.
+post_svg() {
+  curl -sS -o "$svg_out" -D "$headers_out" -w '%{http_code}' "$@" -F "ped=@ped1.txt" "$base_url/svg"
+}
+
+# A request that is refused: the expected status, and nothing of a drawing in the body.
+expect_refused() {
+  local what="$1" expected="$2" status
+  shift 2
+  status="$(post_svg "$@")"
+  if [[ "$status" != "$expected" ]]; then
+    echo "/svg $what: expected $expected, got $status" >&2
+    exit 1
+  fi
+  if grep -q "<svg" "$svg_out"; then
+    echo "/svg $what: answered $status but sent a drawing" >&2
+    exit 1
+  fi
+  echo "/svg $what: $status"
+}
+
+# A 401 names the scheme and says nothing else.
+expect_unauthorized() {
+  expect_refused "$@"
+  if ! grep -qi '^WWW-Authenticate: Bearer' "$headers_out"; then
+    echo "/svg $1: the 401 has no WWW-Authenticate: Bearer header" >&2
+    exit 1
+  fi
+  if [[ -s "$svg_out" ]]; then
+    echo "/svg $1: the 401 has a body" >&2
+    exit 1
+  fi
+}
+
+# No log line may carry a token, whether it was accepted or refused.
+expect_no_token_in_log() {
+  if docker logs "$1" 2>&1 | grep -q -F -e "$token" -e "$wrong_token" -e "$short_token"; then
+    echo "the log of $1 contains a service token" >&2
+    exit 1
+  fi
+}
+
+wait_healthy
 echo "/healthz: $(curl -fsS "$base_url/healthz")"
+
+expect_unauthorized "without a credential" 401
+expect_unauthorized "with a wrong token" 401 -H "Authorization: Bearer $wrong_token"
+expect_unauthorized "with the token under another scheme" 401 -H "Authorization: Basic $token"
 
 # The base image has SVG files of its own under /tmp, so the drawing is checked against a
 # count taken before it.
@@ -84,7 +148,11 @@ if [[ -n "$container" ]]; then
 fi
 
 # The response has to be an SVG document.
-curl -fsS -o "$svg_out" -F "ped=@ped1.txt" "$base_url/svg"
+status="$(post_svg -H "Authorization: Bearer $token")"
+if [[ "$status" != "200" ]]; then
+  echo "/svg with the token: expected 200, got $status" >&2
+  exit 1
+fi
 if ! grep -q "<svg" "$svg_out"; then
   echo "response is not SVG:" >&2
   head -c 500 "$svg_out" >&2
@@ -100,6 +168,57 @@ if [[ -n "$container" ]]; then
     exit 1
   fi
   echo "no temporary SVG file left behind"
+fi
+
+if [[ -n "$container" ]]; then
+  expect_no_token_in_log "$container"
+  echo "no token in the service log"
+fi
+
+# The two starts that are not a working service need containers of their own.
+if [[ -n "$image" ]]; then
+  docker rm -f "$container" >/dev/null
+
+  # Without a token the service starts and stays alive, and refuses every drawing.
+  container="$no_token_container"
+  docker run -d --name "$container" -p "${port}:8080" "$image" >/dev/null
+  wait_healthy
+  echo "no token, /healthz: $(curl -fsS "$base_url/healthz")"
+  expect_refused "on a service with no token" 503 -H "Authorization: Bearer $token"
+  if [[ "$(cat "$svg_out")" != '{"error":"service token not configured"}' ]]; then
+    echo "the 503 body is not the expected one:" >&2
+    head -c 500 "$svg_out" >&2
+    exit 1
+  fi
+  if ! docker logs "$container" 2>&1 | grep -q "ELICIT_SERVICE_TOKEN is not set"; then
+    echo "a service started without a token did not say so in its log" >&2
+    exit 1
+  fi
+  expect_no_token_in_log "$container"
+  docker rm -f "$container" >/dev/null
+
+  # A token that is too short stops the start; the log names the variable, not the value.
+  container="$short_token_container"
+  docker run -d --name "$container" -e ELICIT_SERVICE_TOKEN="$short_token" "$image" >/dev/null
+  running=true
+  for _ in $(seq 1 60); do
+    running="$(docker inspect -f '{{.State.Running}}' "$container")"
+    if [[ "$running" != "true" ]]; then
+      break
+    fi
+    sleep 2
+  done
+  exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$container")"
+  if [[ "$running" == "true" || "$exit_code" == "0" ]]; then
+    echo "a token that is too short did not stop the start" >&2
+    exit 1
+  fi
+  if ! docker logs "$container" 2>&1 | grep -q "ELICIT_SERVICE_TOKEN must be at least 32 characters"; then
+    echo "the refused start does not name the variable and the length required" >&2
+    exit 1
+  fi
+  expect_no_token_in_log "$container"
+  echo "a token that is too short: the container exited with $exit_code"
 fi
 
 echo "smoke test passed"

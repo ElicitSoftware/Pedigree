@@ -46,7 +46,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha
 
-      # Starts the service, waits for /healthz and renders ped1.txt, the sample pedigree the
-      # README posts; prints the service log if a check fails.
+      # Starts the service with a service token of the script's own (a literal for this test,
+      # not a secret), waits for /healthz, checks that /svg refuses a request without the
+      # token and renders ped1.txt, the sample pedigree the README posts, with it; then checks
+      # a start without a token and one with a token that is too short. Prints the service
+      # log if a check fails.
       - name: Smoke-test the image
         run: ci/smoke.sh elicitsoftware/pedigree:ci
