@@ -30,6 +30,15 @@ FROM rstudio/plumber:latest
     # Set the working directory for subsequent commands
     WORKDIR /app
 
+    # Run as an unprivileged user: the service needs no privilege, it listens on 8080 and
+    # writes only to R's temporary directory under /tmp. /app stays owned by root, so the
+    # service cannot rewrite its own handler. The user is numeric so that an orchestrator
+    # can verify "not root" without reading /etc/passwd; HOME is /tmp because the user has
+    # no home directory and the graphics libraries look for a cache under it.
+    RUN useradd --system --no-create-home --uid 10001 --shell /usr/sbin/nologin pedigree
+    ENV HOME=/tmp
+    USER 10001
+
     # Expose port 8080 to allow external access to the API
     EXPOSE 8080
     
