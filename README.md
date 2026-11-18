@@ -12,7 +12,7 @@
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
-[![project_license][license-shield]][https://polyformproject.org/licenses/noncommercial/1.0.0]
+[![project_license][license-shield]][license-url]
 [![LinkedIn][linkedin-shield]][linkedin-url] -->
 
 <!-- Powered by Michigan -->
@@ -119,7 +119,7 @@ See the [open issues](https://github.com/ElicitSoftware/Elicit/issues) for a ful
 ## License
 Released under the MIT License in the hope it will be useful to others.
 
-See `LICENSE.md` for more information.
+See [`LICENSE.md`](LICENSE.md) for more information.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -141,8 +141,8 @@ Project Link: [https://github.com/ElicitSoftware/Pedigree](https://github.com/El
 [stars-url]: https://github.com/ElicitSoftware/Elicit/stargazers
 [issues-shield]: https://img.shields.io/github/issues/ElicitSoftware/Elicit.svg?style=for-the-badge
 [issues-url]: https://github.com/ElicitSoftware/Elicit/issues
-[license-shield]: https://img.shields.io/github/license/ElicitSoftware/Elicit.svg?style=for-the-badge
-[license-url]: https://github.com/ElicitSoftware/Elicit/blob/master/LICENSE.txt
+[license-shield]: https://img.shields.io/github/license/ElicitSoftware/Pedigree.svg?style=for-the-badge
+[license-url]: LICENSE.md
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/linkedin_username
 [product-screenshot]: images/screenshot.png
