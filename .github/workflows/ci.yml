@@ -14,6 +14,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
@@ -24,6 +26,10 @@ permissions:
 jobs:
   smoke:
     name: Build image and smoke-test
+    # Runs only for a release tag. Pull requests and branch pushes still trigger the workflow so
+    # that the ruleset's required check reports, but the job is skipped there, and a skipped job
+    # satisfies a required check. Actions minutes are spent once per release, not on every change.
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     # The Bioconductor install dominates; a cold build takes well over ten minutes.
     timeout-minutes: 60
