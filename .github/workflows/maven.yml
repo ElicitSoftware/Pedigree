@@ -54,16 +54,16 @@ jobs:
       - name: Smoke-test the candidate
         run: ci/smoke.sh elicitsoftware/pedigree:candidate
 
-      # A version with a pre-release part (v3.0.0-beta.1) is pushed under its exact tag only:
-      # metadata-action applies only {{version}} to a pre-release, and latest is enabled only
-      # for a tag without a hyphen. :<major.minor> and :latest move only for a final version.
+      # A version with a pre-release part (v3.0.0-rc.1) is pushed under its exact version only
+      # (:3.0.0-rc.1): metadata-action applies only {{version}} to a pre-release, and latest is
+      # enabled only for a tag without a hyphen. :<major.minor> and :latest move only for a final
+      # version. The git tag itself (:v3.0.0-rc.1) is not pushed, as in the Java modules.
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: elicitsoftware/pedigree
           tags: |
-            type=ref,event=tag
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
