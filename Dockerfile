@@ -1,22 +1,44 @@
 # Elicit FHHS Pedigree API Docker Image
 #
 # This Dockerfile creates a containerized R Plumber API for generating family
-# pedigree diagrams. It uses the official RStudio Plumber base image and adds
-# the Pedixplorer package for pedigree visualization.
+# pedigree diagrams with the Pedixplorer package.
+#
+# Every input is pinned, so two builds of one commit install the same software (Pedigree#21):
+# - the base image by R version and by the digest of its multi-architecture index, which holds
+#   a real linux/amd64 and a real linux/arm64 image (rstudio/plumber, the former base, is
+#   published for amd64 only, so the "arm64" image built from it held amd64 binaries);
+# - CRAN by a dated Posit Package Manager snapshot, which serves Linux binaries for both
+#   architectures;
+# - Bioconductor by its release, which fixes the version of every package in it;
+# - and the build fails unless plumber and Pedixplorer arrive at the versions named below.
+# To update, move the digest, the snapshot date and the versions together, and let CI prove it.
 
-# Base image: RStudio's official Plumber image with R and dependencies pre-installed
-FROM rstudio/plumber:latest
+# rocker/r-ver:4.6.2, multi-architecture index digest.
+FROM rocker/r-ver:4.6.2@sha256:4383092318935c298533466f753354a7dfdc75a6e12edfb93a0f13c8a97135f9
 
-    # Update all system packages to latest versions for security and stability
-    # Clean up apt cache to reduce image size
-    RUN apt-get update && apt-get full-upgrade -y && apt-get install -y libglpk40 && apt-get clean && rm -rf /var/lib/apt/lists/*
+ARG CRAN_SNAPSHOT=https://p3m.dev/cran/__linux__/resolute/2026-11-18
+ARG BIOC_VERSION=3.23
+ARG PLUMBER_VERSION=1.3.3
+ARG PEDIXPLORER_VERSION=1.8.0
 
-    # Install Pedixplorer from Bioconductor.
-    # BiocManager is installed from CRAN first, then used to resolve the
-    # Bioconductor and CRAN dependencies required by Pedixplorer.
-    RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')"
-    RUN R -e "BiocManager::install('Pedixplorer', ask = FALSE, update = FALSE)"
-    RUN R -e "library(Pedixplorer)"
+    # Runtime libraries the binary packages link against: libsodium (sodium, the service
+    # token's HMAC), libglpk (igraph, a Pedixplorer dependency), libcurl/libssl/libxml2
+    # (plumber and Bioconductor's installer) and cairo (the SVG device).
+    RUN apt-get update \
+        && apt-get install -y --no-install-recommends \
+            libsodium23 libglpk40 libcurl4t64 libssl3t64 libxml2-16 libcairo2 libpng16-16t64 \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # CRAN from the dated snapshot for every later install, in place of rocker's "latest".
+    RUN echo "options(repos = c(CRAN = '${CRAN_SNAPSHOT}'))" >> "$(R RHOME)/etc/Rprofile.site"
+
+    RUN Rscript -e "install.packages(c('plumber', 'sodium', 'BiocManager'))" \
+        && Rscript -e "BiocManager::install('Pedixplorer', version = '${BIOC_VERSION}', ask = FALSE, update = FALSE)" \
+        && Rscript -e "for (p in c('plumber', 'sodium', 'Pedixplorer')) message(p, ' ', packageVersion(p))" \
+        && Rscript -e "stopifnot(packageVersion('plumber') == '${PLUMBER_VERSION}', \
+                                 packageVersion('Pedixplorer') == '${PEDIXPLORER_VERSION}', \
+                                 capabilities('cairo')); \
+                       library(sodium); library(Pedixplorer)"
 
     # Create application directory inside the container
     RUN mkdir -p /app
@@ -41,14 +63,14 @@ FROM rstudio/plumber:latest
 
     # Expose port 8080 to allow external access to the API
     EXPOSE 8080
-    
+
     # Configure the container to run the Plumber API when started
     # This command:
     # - Uses plumber::plumb() to load the API definition
     # - Binds to 0.0.0.0 to accept connections from any network interface
     # - Listens on port 8080
-    # - Enables Swagger/OpenAPI documentation if supported by plumber version
-    ENTRYPOINT ["R", "-e", "pr <- plumber::plumb(rev(commandArgs())[1]); args <- list(host = '0.0.0.0', port = 8080); if (packageVersion('plumber') >= '1.0.0') { pr$setDocs(TRUE) } else { args$swagger <- TRUE }; do.call(pr$run, args)"]
+    # - Serves no Swagger/OpenAPI pages: nothing in the platform reads them (Pedigree#21)
+    ENTRYPOINT ["R", "-e", "pr <- plumber::plumb(rev(commandArgs())[1]); pr$setDocs(FALSE); pr$run(host = '0.0.0.0', port = 8080)"]
 
     # Specify the API file to be loaded by the ENTRYPOINT
     CMD ["/app/plumber.R"]

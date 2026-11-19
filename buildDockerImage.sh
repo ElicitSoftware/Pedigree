@@ -13,7 +13,8 @@
 # - Docker with Buildx support (Docker Desktop or Docker Engine 19.03+)
 
 # Build the Docker image for the local platform
-# --no-cache: Forces a fresh build without using cached layers (ensures latest dependencies)
+# --no-cache: Forces a fresh build without using cached layers. Every input is pinned in the
+#   Dockerfile, so a fresh build installs the same versions; it proves they still resolve.
 # -t elicitsoftware/pedigree:latest: Tags the image with repository name and version
 # --load: Loads the built image into the local Docker daemon (a single-platform build)
 # .: Build context is the current directory (where Dockerfile is located)
