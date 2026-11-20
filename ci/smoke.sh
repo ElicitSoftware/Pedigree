@@ -128,9 +128,18 @@ expect_unauthorized() {
   fi
 }
 
+# The container's whole log, read before it is searched. `docker logs | grep -q` would race
+# under pipefail: grep -q stops at its first match, docker logs can then die of SIGPIPE, and the
+# pipeline fails although grep matched (#28).
+container_log() {
+  docker logs "$1" 2>&1
+}
+
 # No log line may carry a token, whether it was accepted or refused.
 expect_no_token_in_log() {
-  if docker logs "$1" 2>&1 | grep -q -F -e "$token" -e "$wrong_token" -e "$short_token"; then
+  local log
+  log="$(container_log "$1")"
+  if grep -q -F -e "$token" -e "$wrong_token" -e "$short_token" <<<"$log"; then
     echo "the log of $1 contains a service token" >&2
     exit 1
   fi
@@ -259,7 +268,7 @@ if [[ -n "$image" ]]; then
     head -c 500 "$svg_out" >&2
     exit 1
   fi
-  if ! docker logs "$container" 2>&1 | grep -q "ELICIT_SERVICE_TOKEN is not set"; then
+  if ! grep -q "ELICIT_SERVICE_TOKEN is not set" <<<"$(container_log "$container")"; then
     echo "a service started without a token did not say so in its log" >&2
     exit 1
   fi
@@ -282,7 +291,7 @@ if [[ -n "$image" ]]; then
     echo "a token that is too short did not stop the start" >&2
     exit 1
   fi
-  if ! docker logs "$container" 2>&1 | grep -q "ELICIT_SERVICE_TOKEN must be at least 32 characters"; then
+  if ! grep -q "ELICIT_SERVICE_TOKEN must be at least 32 characters" <<<"$(container_log "$container")"; then
     echo "the refused start does not name the variable and the length required" >&2
     exit 1
   fi
