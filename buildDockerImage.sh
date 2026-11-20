@@ -5,7 +5,7 @@
 # This script builds the Docker image for the Pedigree API with Docker Buildx,
 # for the platform of the machine it runs on, and loads it into the local
 # Docker daemon. The multi-architecture release image (amd64, arm64) is built
-# and pushed by the release workflow (.github/workflows/maven.yml), not here.
+# and pushed by the release workflow (.github/workflows/release.yml), not here.
 #
 # Usage: ./buildDockerImage.sh
 #

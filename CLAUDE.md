@@ -15,8 +15,8 @@ of these answers.
 The image runs the service as an unprivileged user (uid 10001, `USER` in the `Dockerfile`),
 with `/app` owned by root, and `plumber.R` refuses a request body over 1 MB with 413
 (`plumber.maxRequestSize`) and a pedigree of more than 500 people with 413 before laying it out
-(`max_pedigree_rows`). `/healthz` reports the image's version, the `VERSION` build argument
-(`dev` when it is not passed). `ci/smoke.sh` checks all of these.
+(`max_pedigree_rows`). `/healthz` reports the image's version, the `VERSION` build argument the
+release workflow (`release.yml`) sets from the tag. `ci/smoke.sh` checks all of these.
 
 ## MCP Servers and Skills
 
