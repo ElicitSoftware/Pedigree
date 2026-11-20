@@ -99,7 +99,7 @@ A token that is set but shorter than 32 characters stops the service from starti
 
 ### Limits and the Container User
 
-A request body larger than 1 MB is refused with `413`; a pedigree file is a few kilobytes.
+A request body larger than 1 MB is refused with `413`; a pedigree file is a few kilobytes. So is a pedigree of more than 500 people, before any layout work, since requests are served one at a time.
 
 The service runs in the container as an unprivileged user (uid 10001). It writes only to R's temporary directory under `/tmp`, and `/app` is read-only to it.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -156,8 +156,6 @@ Project Link: [https://github.com/ElicitSoftware/Pedigree](https://github.com/El
 [Docker-url]: https://docker.com
 [Java]: https://img.shields.io/badge/Java-3a75b0?style=for-the-badge&logo=openjdk&logoColor=white
 [Java-url]: https://dev.java/
-[Maven.org]:https://img.shields.io/badge/MAVEN-000000?style=for-the-badge&logo=apachemaven&logoColor=blue
-[Maven-url]: https://maven.apache.org/
 [R.org]: https://img.shields.io/badge/R-r--project.org-blue?style=flat&labelColor=white&logo=r&logoColor=blue
 [R-url]: https://www.r-project.org/
 [Rplumber.io]: https://img.shields.io/badge/Plumber%20--%20lightblue
