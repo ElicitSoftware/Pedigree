@@ -87,7 +87,7 @@ curl -H "Authorization: Bearer $ELICIT_SERVICE_TOKEN" -F "ped=@ped1.txt" -o ped1
 
 ### The Service Token
 
-Every path except `GET /healthz` requires the header `Authorization: Bearer <token>`. That includes `POST /svg` and the Swagger/OpenAPI pages (`/__docs__/`, `/openapi.json`). `/healthz` stays open, so a liveness probe needs no credential, and it answers 200 whether or not a token is configured.
+Every path except `GET /healthz` requires the header `Authorization: Bearer <token>`. That includes `POST /svg`. The image serves no Swagger/OpenAPI pages; `/__docs__/` and `/openapi.json` answer 404. `/healthz` stays open, so a liveness probe needs no credential, and it answers 200 whether or not a token is configured.
 
 | Situation | Answer |
 | --- | --- |

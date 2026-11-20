@@ -142,6 +142,16 @@ expect_unauthorized "without a credential" 401
 expect_unauthorized "with a wrong token" 401 -H "Authorization: Bearer $wrong_token"
 expect_unauthorized "with the token under another scheme" 401 -H "Authorization: Basic $token"
 
+# The image serves no Swagger/OpenAPI pages (Pedigree#21), not even to a caller with the token.
+for path in /__docs__/ /openapi.json; do
+  status="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" "$base_url$path")"
+  if [[ "$status" != "404" ]]; then
+    echo "$path with the token: expected 404, got $status" >&2
+    exit 1
+  fi
+  echo "$path with the token: $status"
+done
+
 # The base image has SVG files of its own under /tmp, so the drawing is checked against a
 # count taken before it. Counted as root: the image's own directories under /tmp are not
 # readable by the service's user.
