@@ -61,6 +61,12 @@ ARG PEDIXPLORER_VERSION=1.8.0
     ENV HOME=/tmp
     USER 10001
 
+    # The version the image is released as, passed as --build-arg VERSION=<version>; without it
+    # the image is "dev". /healthz reports it, and it is the image's OCI version label.
+    ARG VERSION=dev
+    ENV PEDIGREE_VERSION=$VERSION
+    LABEL org.opencontainers.image.version=$VERSION
+
     # Expose port 8080 to allow external access to the API
     EXPOSE 8080
 

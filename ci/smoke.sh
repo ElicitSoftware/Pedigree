@@ -9,7 +9,8 @@
 # that the answer is an SVG document and that the drawing left no temporary file behind.
 # It checks that the service runs as the unprivileged user (uid 10001) and cannot write to
 # /app, and that a request body over the 1 MB limit is refused (413) and the service still
-# draws afterwards.
+# draws afterwards, and that a pedigree of more than 500 people is refused the same way. /healthz
+# must report the image's version.
 # Given an image, it then starts it twice more: without a token (/healthz 200, /svg 503)
 # and with a token that is too short (the container must exit). No service log may contain
 # a token. Both workflows run it: ci.yml on every pull request, and the release workflow
@@ -43,7 +44,7 @@ elif [[ $# -eq 1 && "$1" != -* ]]; then
   base_url="http://localhost:${port}"
   container="${SMOKE_CONTAINER:-pedigree-smoke}"
 else
-  sed -n '15,17p' "$0" | sed 's/^# //' >&2
+  sed -n '19,21p' "$0" | sed 's/^# //' >&2
   exit 2
 fi
 
@@ -136,7 +137,13 @@ expect_no_token_in_log() {
 }
 
 wait_healthy
-echo "/healthz: $(curl -fsS "$base_url/healthz")"
+health="$(curl -fsS "$base_url/healthz")"
+echo "/healthz: $health"
+# The image reports its version (the release tag, or "dev" for a local build).
+if ! grep -q '"version"' <<<"$health"; then
+  echo "/healthz names no version" >&2
+  exit 1
+fi
 
 expect_unauthorized "without a credential" 401
 expect_unauthorized "with a wrong token" 401 -H "Authorization: Bearer $wrong_token"
@@ -213,6 +220,24 @@ if [[ "$status" != "200" ]] || ! grep -q "<svg" "$svg_out"; then
   exit 1
 fi
 echo "/svg after a refused body: $status"
+
+# A pedigree of more than 500 people is refused before it is laid out, and the service draws the
+# sample again afterwards.
+{
+  printf 'famid\tid\tsex\tdadid\tmomid\tdeceased\tproband\taffection\tavail\tdisplay_id\tcancer_label\n'
+  for i in $(seq 1 501); do printf '1\t%d\t1\tNA\tNA\t0\t0\t0\t1\tP%d\t\n' "$i" "$i"; done
+} > "$oversized"
+status="$(curl -sS -o "$svg_out" -w '%{http_code}' -H "Authorization: Bearer $token" -F "ped=@$oversized;type=text/plain" "$base_url/svg")"
+if [[ "$status" != "413" ]]; then
+  echo "/svg with 501 people: expected 413, got $status" >&2
+  exit 1
+fi
+echo "/svg with 501 people: $status"
+status="$(post_svg -H "Authorization: Bearer $token")"
+if [[ "$status" != "200" ]] || ! grep -q "<svg" "$svg_out"; then
+  echo "/svg after a refused pedigree: expected a drawing, got $status" >&2
+  exit 1
+fi
 
 if [[ -n "$container" ]]; then
   expect_no_token_in_log "$container"

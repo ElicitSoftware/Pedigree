@@ -1,92 +1,3 @@
-#* Generates a landscape SVG image from a pedigree data frame
-#*
-#* This endpoint accepts a tab-delimited file containing pedigree data and
-#* generates an SVG visualization of the family tree in landscape orientation (11x8.5 inches).
-#* The SVG is returned as a character string.
-#*
-#* @post /svg
-#* @param ped:file A tab-delimited file containing pedigree data
-#* @serializer contentType list(type="image/svg+xml")
-function(ped) {
-  # Requests are handled one at a time, so a device still open here was left by an earlier one
-  graphics.off()
-
-  file_content <- ped[[1]]
-
-  data_df <- read.table(
-    text = file_content,
-    header = TRUE,
-    sep = "\t",
-    na.strings = "NA",
-    stringsAsFactors = FALSE,
-    quote = "",
-    comment.char = ""
-  )
-
-  pedigree_df <- build_pedixplorer_df(data_df)
-  layout_scale <- attr(pedigree_df, "layout_scale")
-  if (is.null(layout_scale)) layout_scale <- 1
-
-  pedigree_obj <- suppressWarnings(
-    Pedigree(
-      pedigree_df,
-      col_aff = "affection",
-      col_avail = "avail",
-      colors_aff = c("white", "red"),
-      colors_unaff = c("white", "white"),
-      colors_avail = c("black", "black")
-    )
-  )
-
-  # Create a temporary file for the SVG
-  svg_file <- tempfile(fileext = ".svg")
-  svg(filename = svg_file, width = 11, height = 8.5)
-  # Close this request's device and remove its file however the function exits
-  dev_id <- dev.cur()
-  on.exit({
-    if (dev_id %in% dev.list()) dev.off(dev_id)
-    unlink(svg_file)
-  }, add = TRUE)
-  # Increase left and right margins to prevent text cutoff
-  # Further increase left margin to prevent text cutoff
-  par(mar = c(5, 4, 1, 4))
-
-  plot_data <- suppressWarnings(
-    ped_to_plotdf(
-      pedigree_obj,
-      aff_mark = FALSE,
-      id_lab = "display_id",
-      label = "cancer_label",
-      label_dist = c(1, 1.5, 2.1),
-      symbolsize = 1.2 * layout_scale,
-      cex = 0.7 * layout_scale
-    )
-  )
-
-  plot_data$df <- subset(plot_data$df, !(id %in% c("consultand-proband", "proband")))
-  plot_data <- add_proband_halo(plot_data, pedigree_df, layout_scale)
-
-  suppressWarnings(
-    plot_fromdf(
-      plot_data$df,
-      usr = plot_data$par_usr$usr,
-      boxw = plot_data$par_usr$boxw,
-      boxh = plot_data$par_usr$boxh
-    )
-  )
-
-  mtext("Red fill = Family member with cancer", side = 1, line = 2, cex = 0.8, col = "red")
-
-  if (grepl("*", file_content, fixed = TRUE)) {
-    mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 3, cex = 0.8, col = "black")
-  }
-
-  dev.off(dev_id)
-
-  # Read SVG content and return
-  svg_content <- paste(readLines(svg_file, warn = FALSE), collapse = "\n")
-  return(svg_content)
-}
 # Elicit FHHS Pedigree API
 #
 # This Plumber API provides endpoints for generating family pedigree diagrams
@@ -102,6 +13,13 @@ library(Pedixplorer)
 # A pedigree file is a few kilobytes. A request body over this many bytes is refused with
 # 413 (plumber 1.1.0 or later; ci/smoke.sh checks that the installed plumber honors it).
 options(plumber.maxRequestSize = 1e6)
+
+# The most people one pedigree may have; a larger one is refused with 413 before it is laid out.
+# A family history is a few dozen people at most.
+max_pedigree_rows <- 500L
+
+# The image's version, from the build (Dockerfile ARG VERSION); "dev" for a local build.
+pedigree_version <- Sys.getenv("PEDIGREE_VERSION", unset = "dev")
 
 # The service token: the value a caller presents as "Authorization: Bearer <token>".
 # It is read once, here, and removed from the environment; it is never printed.
@@ -285,7 +203,7 @@ add_proband_halo <- function(plot_data, pedigree_df, layout_scale = 1) {
     cex = halo_cex,
     label = NA_character_,
     tips = "",
-      lwd = 5,
+    lwd = 5,
     adjx = NA_real_,
     adjy = NA_real_,
     lty = NA_real_,
@@ -317,6 +235,8 @@ build_pedixplorer_df <- function(data_df) {
   sex <- suppressWarnings(as.integer(data_df[["sex"]]))
   sex[is.na(sex)] <- 3L
 
+  # The legacy layout (ped1.txt, the README's sample) has no proband column. FHHS numbers the
+  # proband 7 in every file it sends (FamilyMember.PROBAND_ID), so that is the fallback.
   proband <- if ("proband" %in% names(data_df)) {
     normalize_flag(data_df[["proband"]])
   } else {
@@ -376,11 +296,114 @@ build_pedixplorer_df <- function(data_df) {
   result
 }
 
+#* Generates a landscape SVG image from a pedigree data frame
+#*
+#* This endpoint accepts a tab-delimited file containing pedigree data and
+#* generates an SVG visualization of the family tree in landscape orientation (11x8.5 inches).
+#* The SVG is returned as a character string.
+#*
+#* @post /svg
+#* @param ped:file A tab-delimited file containing pedigree data
+#* @serializer contentType list(type="image/svg+xml")
+function(ped, res) {
+  # Requests are handled one at a time, so a device still open here was left by an earlier one
+  graphics.off()
+
+  # plumber hands a text/plain part over as text and any other part (application/octet-stream,
+  # what curl sends for a file without a known extension) as raw bytes
+  file_content <- ped[[1]]
+  if (is.raw(file_content)) file_content <- rawToChar(file_content)
+
+  data_df <- read.table(
+    text = file_content,
+    header = TRUE,
+    sep = "\t",
+    na.strings = "NA",
+    stringsAsFactors = FALSE,
+    quote = "",
+    comment.char = ""
+  )
+
+  # Laying out a pedigree takes time that grows with its size, and requests are served one at
+  # a time, so a pedigree over the limit is refused before any layout work (413, as for a body
+  # over the size limit).
+  if (nrow(data_df) > max_pedigree_rows) {
+    res$status <- 413
+    res$setHeader("Content-Type", "application/json")
+    res$body <- sprintf('{"error":"a pedigree may have at most %d people"}', max_pedigree_rows)
+    return(res)
+  }
+
+  pedigree_df <- build_pedixplorer_df(data_df)
+  layout_scale <- attr(pedigree_df, "layout_scale")
+  if (is.null(layout_scale)) layout_scale <- 1
+
+  pedigree_obj <- suppressWarnings(
+    Pedigree(
+      pedigree_df,
+      col_aff = "affection",
+      col_avail = "avail",
+      colors_aff = c("white", "red"),
+      colors_unaff = c("white", "white"),
+      colors_avail = c("black", "black")
+    )
+  )
+
+  # Create a temporary file for the SVG
+  svg_file <- tempfile(fileext = ".svg")
+  svg(filename = svg_file, width = 11, height = 8.5)
+  # Close this request's device and remove its file however the function exits
+  dev_id <- dev.cur()
+  on.exit({
+    if (dev_id %in% dev.list()) dev.off(dev_id)
+    unlink(svg_file)
+  }, add = TRUE)
+  # Room below for the legend lines, and at the sides so labels at the edges are not cut off
+  par(mar = c(5, 4, 1, 4))
+
+  plot_data <- suppressWarnings(
+    ped_to_plotdf(
+      pedigree_obj,
+      aff_mark = FALSE,
+      id_lab = "display_id",
+      label = "cancer_label",
+      label_dist = c(1, 1.5, 2.1),
+      symbolsize = 1.2 * layout_scale,
+      cex = 0.7 * layout_scale
+    )
+  )
+
+  plot_data$df <- subset(plot_data$df, !(id %in% c("consultand-proband", "proband")))
+  plot_data <- add_proband_halo(plot_data, pedigree_df, layout_scale)
+
+  suppressWarnings(
+    plot_fromdf(
+      plot_data$df,
+      usr = plot_data$par_usr$usr,
+      boxw = plot_data$par_usr$boxw,
+      boxh = plot_data$par_usr$boxh
+    )
+  )
+
+  mtext("Red fill = Family member with cancer", side = 1, line = 2, cex = 0.8, col = "red")
+
+  if (grepl("*", file_content, fixed = TRUE)) {
+    mtext("* Indicates multiple diagnoses of the same cancer type.", side = 1, line = 3, cex = 0.8, col = "black")
+  }
+
+  dev.off(dev_id)
+
+  # Read SVG content and return
+  svg_content <- paste(readLines(svg_file, warn = FALSE), collapse = "\n")
+  return(svg_content)
+}
+
 #* Health check endpoint
 #*
-#* Returns a simple status object to verify the API is running and responsive.
+#* Returns a simple status object, with the image's version, to verify the API is running and
+#* responsive.
 #*
 #* @get /healthz
 function() {
-  list(status = "ok")
+  list(status = "ok", version = pedigree_version)
 }
