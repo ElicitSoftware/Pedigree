@@ -4,8 +4,6 @@
 # the script ci.yml runs on every pull request; the multi-arch build then reuses its layers.
 # The arm64 half is built under QEMU and is not run here.
 #
-# The file keeps its historical name; nothing in it uses Maven.
-#
 # Actions are pinned to a commit, with the version it belongs to beside it; move both together.
 
 name: Build and Push Multi-Arch Docker Image
@@ -37,23 +35,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # Single platform and loaded into the runner's Docker, so it can be run. Its layers go
-      # to the cache the multi-platform build below reads.
-      - name: Build the candidate image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          load: true
-          tags: elicitsoftware/pedigree:candidate
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # A candidate that does not answer /healthz, does not require the service token on /svg
-      # or does not draw the sample pedigree stops the release here, before the login and the
-      # push. The token is the script's own literal for this test, not a secret.
-      - name: Smoke-test the candidate
-        run: ci/smoke.sh elicitsoftware/pedigree:candidate
-
       # A version with a pre-release part (v3.0.0-rc.1) is pushed under its exact version only
       # (:3.0.0-rc.1): metadata-action applies only {{version}} to a pre-release, and latest is
       # enabled only for a tag without a hyphen. :<major.minor> and :latest move only for a final
@@ -67,6 +48,24 @@ jobs:
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+
+      # Single platform and loaded into the runner's Docker, so it can be run. Its layers go
+      # to the cache the multi-platform build below reads.
+      - name: Build the candidate image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: elicitsoftware/pedigree:candidate
+          build-args: VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # A candidate that does not answer /healthz, does not require the service token on /svg
+      # or does not draw the sample pedigree stops the release here, before the login and the
+      # push. The token is the script's own literal for this test, not a secret.
+      - name: Smoke-test the candidate
+        run: ci/smoke.sh elicitsoftware/pedigree:candidate
 
       # Logged in only for the push that needs it.
       - name: Login to DockerHub
@@ -83,5 +82,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
