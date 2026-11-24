@@ -48,6 +48,10 @@ jobs:
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+          # Stated here, not left to GitHub's detection of the license file.
+          labels: |
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.vendor=Elicit Software LLC
 
       # Single platform and loaded into the runner's Docker, so it can be run. Its layers go
       # to the cache the multi-platform build below reads.

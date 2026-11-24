@@ -22,7 +22,7 @@
     <img src="images/stacked.png" alt="Logo" width="15%" >
   </a>
 <h3 align="center">Elicit Software</h3>
-  <p>Copyright © 2025 The Regents of the University of Michigan</p>
+  <p>Copyright © 2025-2026 Elicit Software LLC</p>
 </div>
 <!-- TABLE OF CONTENTS -->
 <details>
